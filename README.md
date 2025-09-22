@@ -1,5 +1,29 @@
 # FreePBX NWS SAME Alert System
 
+## 🌩 How It Works (Quick Start)
+
+This system transforms your FreePBX into a **live weather alerting platform** with data sourced from the **National Weather Service (NWS) API**. Once installed:
+
+1. **Dial 7788 from your extension**
+
+   * Press **1** → Add a SAME (FIPS) code (6 digits)
+   * Press **2** → Remove a SAME code
+   * Press **3** → Hear a list of your subscribed SAME codes
+
+2. **Sit back and relax** ☕
+   When the NWS issues an alert for any of your SAME codes:
+
+   * The system **immediately fetches the alert**
+   * Generates **crystal-clear HD audio** using local text-to-speech
+   * Your phone **auto-answers via intercom** and plays the warning
+
+3. **No spam, no repeats**
+   Each extension gets called **once per alert thread** (initial + updates), even if multiple SAME codes overlap.
+
+⚡ In short: you’ll never miss a weather warning again, and your PBX becomes the smartest, fastest alerting tool around.
+
+---
+
 Deliver **National Weather Service (NWS)** alerts to FreePBX phones via **auto-answer paging** with **local text-to-speech (TTS)**.
 Users subscribe by dialing a menu, entering their **SAME (FIPS) codes**, and will be auto-called when matching alerts are active.
 
@@ -109,7 +133,7 @@ fwconsole reload
 
 ---
 
-## How It Works (user flow)
+## How It Works (detailed)
 
 1. **Subscribe by phone:**
    Dial **7788** from any extension:
