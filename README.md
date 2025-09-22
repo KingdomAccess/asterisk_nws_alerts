@@ -2,9 +2,9 @@
 
 ## 🌩 How It Works (Quick Start)
 
-This system transforms your FreePBX into a **live weather alerting platform** with data sourced from the **National Weather Service (NWS) API**. Once installed:
+This system transforms your FreePBX into a **live weather alerting platform** powered by the **National Weather Service (NWS)**. Once installed:
 
-1. **Dial 7788 from your extension**
+1. **Dial the SAME menu extension** (default **7788**, customizable in `extensions_custom.conf`).
 
    * Press **1** → Add a SAME (FIPS) code (6 digits)
    * Press **2** → Remove a SAME code
@@ -16,6 +16,7 @@ This system transforms your FreePBX into a **live weather alerting platform** wi
    * The system **immediately fetches the alert**
    * Generates **crystal-clear HD audio** using local text-to-speech
    * Your phone **auto-answers via intercom** and plays the warning
+   * The call will display as **System Alert** instead of “Unknown Caller”
 
 3. **No spam, no repeats**
    Each extension gets called **once per alert thread** (initial + updates), even if multiple SAME codes overlap.
@@ -24,20 +25,16 @@ This system transforms your FreePBX into a **live weather alerting platform** wi
 
 ---
 
-Deliver **National Weather Service (NWS)** alerts to FreePBX phones via **auto-answer paging** with **local text-to-speech (TTS)**.
-Users subscribe by dialing a menu, entering their **SAME (FIPS) codes**, and will be auto-called when matching alerts are active.
-
----
-
 ## What’s Included (repo files)
 
 | Repo file                  | Purpose                                                                |
 | -------------------------- | ---------------------------------------------------------------------- |
 | `same_subs.py`             | AGI script for users to **add/remove/list** SAME codes by phone        |
-| `extensions_custom.conf`   | Dialplan additions (binds **7788** to the subscription menu)           |
+| `extensions_custom.conf`   | Dialplan additions (binds SAME menu to an extension, default **7788**) |
 | `generatePrompts.sh`       | Generates the **menu audio prompts** (wideband)                        |
 | `nws_alert_poller.py`      | Polls NWS API, generates TTS audio, **auto-answers** target extensions |
 | `nws-alert-poller.service` | systemd unit to keep the poller running continuously                   |
+| `multiPage.sh`             | Manual sender script to page multiple extensions with TTS + delay      |
 
 > **Important:** Where this guide says `you@domain.com`, change it to **your real email**. NWS requires a valid contact in the User-Agent.
 
@@ -75,6 +72,9 @@ cp nws_alert_poller.py /usr/local/bin/
 
 # Systemd unit (keeps the poller running)
 cp nws-alert-poller.service /etc/systemd/system/
+
+# Manual pager (for testing or ad-hoc alerts)
+cp multiPage.sh /usr/local/bin/
 ```
 
 ### 2) Make scripts executable (and set AGI ownership)
@@ -84,20 +84,15 @@ chmod +x /var/lib/asterisk/agi-bin/same_subs.py
 chown asterisk:asterisk /var/lib/asterisk/agi-bin/same_subs.py
 
 chmod +x /usr/local/bin/nws_alert_poller.py
-chmod +x /usr/local/bin/generatePrompts.sh 2>/dev/null || true
-chmod +x generatePrompts.sh 2>/dev/null || true
+chmod +x /usr/local/bin/generatePrompts.sh
+chmod +x /usr/local/bin/multiPage.sh
 ```
 
 ### 3) Generate the menu prompts
 
-This script creates the audio used by the phone menu (7788) into FreePBX’s sounds directory.
-If you want to change the wording later, edit `generatePrompts.sh` and rerun it.
-
 ```bash
-./generatePrompts.sh
+/usr/local/bin/generatePrompts.sh
 ```
-
-> If the script isn’t in your current directory, run `/usr/local/bin/generatePrompts.sh`.
 
 ### 4) Reload FreePBX to load the new dialplan
 
@@ -122,6 +117,36 @@ fwconsole reload
 
 ---
 
+## Customization
+
+* **SAME Menu Extension:**
+  Default is **7788**. Change it in `extensions_custom.conf` under `[from-internal-custom]`.
+
+* **Caller ID for Alerts:**
+  Pages display as **System Alert** with number **0000**. Change the name/number in:
+
+  * `nws_alert_poller.py` → `page_extension()` function
+  * `multiPage.sh` → the `asterisk -rx` line
+
+* **Pre-play Delay:**
+  Some phones take a second to auto-answer. Delay is handled by chaining `silence/1` files before playback.
+
+  * Change default seconds in systemd unit:
+
+    ```
+    Environment=NWS_PREWAIT_SEC=2
+    ```
+  * Or override per manual page run:
+
+    ```bash
+    ./multiPage.sh -e 1001 -m "Test" -d 3
+    ```
+
+* **User-Agent Contact Email:**
+  Change `you@domain.com` to your real, reachable email in the systemd unit. Required by NWS.
+
+---
+
 ## FreePBX / Phone Settings
 
 * **Intercom / Auto-Answer:**
@@ -130,28 +155,6 @@ fwconsole reload
 
 * **Wideband (HD) audio:**
   Enable **G.722** on extensions/phones and in FreePBX so alerts and prompts play in higher quality.
-
----
-
-## How It Works (detailed)
-
-1. **Subscribe by phone:**
-   Dial **7788** from any extension:
-
-   * Press **1** to add a 6-digit SAME code
-   * Press **2** to remove a code
-   * Press **3** to hear your current codes
-
-2. **When an alert is active:**
-   The poller:
-
-   * Queries the NWS API with a valid User-Agent (includes your email)
-   * Matches each alert’s SAME codes to your subscribers
-   * Generates an HD TTS file (per SAME code + alert thread)
-   * **Auto-answers** target extensions using the FreePBX intercom prefix
-
-3. **No duplicates:**
-   Each extension is called **once per alert thread** (initial + updates), even if multiple SAME codes match.
 
 ---
 
