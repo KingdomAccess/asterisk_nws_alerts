@@ -2,7 +2,7 @@
 
 ## 🌩 How It Works (Quick Start)
 
-This system transforms your FreePBX into a **live weather alerting platform** powered by the **National Weather Service (NWS)**. Once installed:
+This system transforms your FreePBX into a **live weather alerting platform** with alerts from the **National Weather Service (NWS) API**. Once installed:
 
 1. **Dial the SAME menu extension** (default **7788**, customizable in `extensions_custom.conf`).
 
