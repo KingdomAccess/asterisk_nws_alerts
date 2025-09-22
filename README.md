@@ -2,7 +2,7 @@
 
 ## 🌩 How It Works (Quick Start)
 
-This system transforms your FreePBX into a **live weather alerting platform** with alerts from the **National Weather Service (NWS) API**. Once installed:
+This system transforms your FreePBX into a **live weather alerting platform** powered by the **National Weather Service (NWS)**. Once installed:
 
 1. **Dial the SAME menu extension** (default **7788**, customizable in `extensions_custom.conf`).
 
@@ -25,7 +25,47 @@ This system transforms your FreePBX into a **live weather alerting platform** wi
 
 ---
 
-## What’s Included (repo files)
+## Installation
+
+### 🔹 Option A: Automatic Installation (recommended)
+
+Run the provided `install.sh` script. It will:
+
+* Install dependencies (`pico2wave`, `sox`)
+* Ask for your **contact email** (required by NWS)
+* Ask for your preferred **SAME menu extension** (default: 7788)
+* Configure **pre-play delay** (default: 2 seconds)
+* Configure **Caller ID name/number** (default: `System Alert` / `0000`)
+* Copy all scripts and config files to the correct locations
+* Fix permissions
+* Generate audio prompts
+* Reload FreePBX
+* Enable and start the poller service
+
+```bash
+sudo ./install.sh
+```
+
+Non-interactive example:
+
+```bash
+sudo ./install.sh --menu-ext 7788 --email ops@yourcompany.com --delay 2 \
+     --cid-name "System Alert" --cid-num 0000
+```
+
+After installation, check status:
+
+```bash
+systemctl status nws-alert-poller
+```
+
+---
+
+### 🔹 Option B: Manual Installation
+
+If you prefer to install manually, follow these steps:
+
+#### What’s Included (repo files)
 
 | Repo file                  | Purpose                                                                |
 | -------------------------- | ---------------------------------------------------------------------- |
@@ -38,9 +78,7 @@ This system transforms your FreePBX into a **live weather alerting platform** wi
 
 > **Important:** Where this guide says `you@domain.com`, change it to **your real email**. NWS requires a valid contact in the User-Agent.
 
----
-
-## Requirements
+#### Requirements
 
 * A working **FreePBX/Asterisk** system
 * Linux shell access (root)
@@ -51,69 +89,52 @@ apt-get update
 apt-get install -y libttspico-utils sox
 ```
 
----
+#### Manual Install (step-by-step)
 
-## Install (step-by-step)
+1. **Copy files to their destinations**
 
-### 1) Copy files to their destinations
+   * `same_subs.py` → `/var/lib/asterisk/agi-bin/`
+   * `extensions_custom.conf` → `/etc/asterisk/`
+   * `generatePrompts.sh` → `/usr/local/bin/`
+   * `nws_alert_poller.py` → `/usr/local/bin/`
+   * `nws-alert-poller.service` → `/etc/systemd/system/`
+   * `multiPage.sh` → `/usr/local/bin/`
 
-```bash
-# AGI (subscription menu backend)
-cp same_subs.py /var/lib/asterisk/agi-bin/
-
-# Dialplan additions (subscription menu on 7788)
-cp extensions_custom.conf /etc/asterisk/
-
-# Prompt generator (you can keep it in the repo root or move it)
-cp generatePrompts.sh /usr/local/bin/
-
-# Poller (fetch NWS alerts + place auto-answer calls)
-cp nws_alert_poller.py /usr/local/bin/
-
-# Systemd unit (keeps the poller running)
-cp nws-alert-poller.service /etc/systemd/system/
-
-# Manual pager (for testing or ad-hoc alerts)
-cp multiPage.sh /usr/local/bin/
-```
-
-### 2) Make scripts executable (and set AGI ownership)
-
-```bash
-chmod +x /var/lib/asterisk/agi-bin/same_subs.py
-chown asterisk:asterisk /var/lib/asterisk/agi-bin/same_subs.py
-
-chmod +x /usr/local/bin/nws_alert_poller.py
-chmod +x /usr/local/bin/generatePrompts.sh
-chmod +x /usr/local/bin/multiPage.sh
-```
-
-### 3) Generate the menu prompts
-
-```bash
-/usr/local/bin/generatePrompts.sh
-```
-
-### 4) Reload FreePBX to load the new dialplan
-
-```bash
-fwconsole reload
-```
-
-### 5) Configure and start the poller (systemd)
-
-1. **Edit `nws-alert-poller.service`** and replace the placeholder email:
-
-   * Find `Environment=NWS_USER_AGENT=FreePBX-NWS-Alert/1.0 (contact: you@domain.com)`
-   * Change to your real email (e.g., `ops@yourcompany.com`).
-
-2. **Enable and start the service:**
+2. **Make scripts executable (and set AGI ownership)**
 
    ```bash
-   systemctl daemon-reload
-   systemctl enable --now nws-alert-poller
-   systemctl status nws-alert-poller
+   chmod +x /var/lib/asterisk/agi-bin/same_subs.py
+   chown asterisk:asterisk /var/lib/asterisk/agi-bin/same_subs.py
+
+   chmod +x /usr/local/bin/nws_alert_poller.py
+   chmod +x /usr/local/bin/generatePrompts.sh
+   chmod +x /usr/local/bin/multiPage.sh
    ```
+
+3. **Generate the menu prompts**
+
+   ```bash
+   /usr/local/bin/generatePrompts.sh
+   ```
+
+4. **Reload FreePBX to load the new dialplan**
+
+   ```bash
+   fwconsole reload
+   ```
+
+5. **Configure and start the poller (systemd)**
+
+   * Edit `/etc/systemd/system/nws-alert-poller.service` and update:
+
+     * `Environment=NWS_USER_AGENT=FreePBX-NWS-Alert/1.0 (contact: you@domain.com)` → your real email
+     * `Environment=NWS_PREWAIT_SEC=2` → change delay if needed
+   * Enable and start:
+
+     ```bash
+     systemctl daemon-reload
+     systemctl enable --now nws-alert-poller
+     ```
 
 ---
 
