@@ -5,7 +5,7 @@ from pathlib import Path
 # ------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------
-SUBS_FILE   = Path("/etc/asterisk/nws_subscriptions.json")
+SUBS_FILE = Path("/var/lib/asterisk/nws_subscriptions.json")
 SOUNDS_DIR  = Path("/var/lib/asterisk/sounds/custom")
 STATE_FILE  = Path("/var/lib/asterisk/nws_alert_state.json")
 
