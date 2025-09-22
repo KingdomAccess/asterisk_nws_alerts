@@ -1,143 +1,188 @@
-📡 FreePBX NWS SAME Alert System
+# FreePBX NWS SAME Alert System
 
-This project integrates the National Weather Service (NWS) Alerts API with FreePBX to automatically deliver voice alerts via paging/intercom to selected extensions.
+Deliver **National Weather Service (NWS)** alerts to FreePBX phones via **auto-answer paging** with **local text-to-speech (TTS)**.
+Users subscribe by dialing a menu, entering their **SAME (FIPS) codes**, and will be auto-called when matching alerts are active.
 
-Users can dial into a special menu, subscribe to their SAME (FIPS) codes, and automatically receive text-to-speech (TTS) alerts when warnings are issued for their area.
+---
 
-✨ Features
+## What’s Included (repo files)
 
-User Menu (extension 7788)
+| Repo file                  | Purpose                                                                |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `same_subs.py`             | AGI script for users to **add/remove/list** SAME codes by phone        |
+| `extensions_custom.conf`   | Dialplan additions (binds **7788** to the subscription menu)           |
+| `generatePrompts.sh`       | Generates the **menu audio prompts** (wideband)                        |
+| `nws_alert_poller.py`      | Polls NWS API, generates TTS audio, **auto-answers** target extensions |
+| `nws-alert-poller.service` | systemd unit to keep the poller running continuously                   |
 
-Press 1 → Add a SAME code
+> **Important:** Where this guide says `you@domain.com`, change it to **your real email**. NWS requires a valid contact in the User-Agent.
 
-Press 2 → Remove a SAME code
+---
 
-Press 3 → List current codes
+## Requirements
 
-Automatic Paging
+* A working **FreePBX/Asterisk** system
+* Linux shell access (root)
+* Packages: `libttspico-utils` (pico2wave TTS), `sox`
 
-Polls the NWS API for active alerts
-
-Generates high-quality audio using local TTS
-
-Auto-answers phones via the FreePBX intercom prefix (*80)
-
-De-duplication
-
-Each extension receives each alert only once, even if it covers multiple SAME codes
-
-Easy Testing
-
-Manual script provided to send test TTS messages to any extension
-
-📂 Repository Contents
-
-same_subs.py
-Handles subscription logic (add/remove/list SAME codes).
-
-extensions_custom.conf
-Custom FreePBX dialplan additions (binds extension 7788 to the menu).
-
-generatePrompts.sh
-Helper script to generate the audio prompts used by the subscription menu.
-
-nws_alert_poller.py
-Polls the NWS API, generates alert audio, and originates paging calls.
-
-nws-alert-poller.service
-A systemd service unit file to keep the poller running continuously.
-
-🚀 Installation
-
-Dependencies
-Install required tools:
-
+```bash
 apt-get update
 apt-get install -y libttspico-utils sox
+```
 
+---
 
-Deploy files
-Copy each file from this repo to its destination:
+## Install (step-by-step)
 
-same_subs.py → /var/lib/asterisk/agi-bin/
+### 1) Copy files to their destinations
 
-extensions_custom.conf → /etc/asterisk/
+```bash
+# AGI (subscription menu backend)
+cp same_subs.py /var/lib/asterisk/agi-bin/
 
-generatePrompts.sh → Anywhere convenient (e.g. /usr/local/bin/)
+# Dialplan additions (subscription menu on 7788)
+cp extensions_custom.conf /etc/asterisk/
 
-nws_alert_poller.py → /usr/local/bin/
+# Prompt generator (you can keep it in the repo root or move it)
+cp generatePrompts.sh /usr/local/bin/
 
-nws-alert-poller.service → /etc/systemd/system/
+# Poller (fetch NWS alerts + place auto-answer calls)
+cp nws_alert_poller.py /usr/local/bin/
 
-Make scripts executable:
+# Systemd unit (keeps the poller running)
+cp nws-alert-poller.service /etc/systemd/system/
+```
 
+### 2) Make scripts executable (and set AGI ownership)
+
+```bash
 chmod +x /var/lib/asterisk/agi-bin/same_subs.py
+chown asterisk:asterisk /var/lib/asterisk/agi-bin/same_subs.py
+
 chmod +x /usr/local/bin/nws_alert_poller.py
-chmod +x generatePrompts.sh
+chmod +x /usr/local/bin/generatePrompts.sh 2>/dev/null || true
+chmod +x generatePrompts.sh 2>/dev/null || true
+```
 
+### 3) Generate the menu prompts
 
-Generate prompts
-Run:
+This script creates the audio used by the phone menu (7788) into FreePBX’s sounds directory.
+If you want to change the wording later, edit `generatePrompts.sh` and rerun it.
 
+```bash
 ./generatePrompts.sh
+```
 
+> If the script isn’t in your current directory, run `/usr/local/bin/generatePrompts.sh`.
 
-This will create the menu audio files inside FreePBX’s sounds directory.
+### 4) Reload FreePBX to load the new dialplan
 
-Reload FreePBX
-
+```bash
 fwconsole reload
+```
 
+### 5) Configure and start the poller (systemd)
 
-Enable the poller service
-Update the systemd service file (nws-alert-poller.service) with your email address in the NWS_USER_AGENT environment variable (e.g., replace you@domain.com).
-Then run:
+1. **Edit `nws-alert-poller.service`** and replace the placeholder email:
 
-systemctl daemon-reload
-systemctl enable --now nws-alert-poller
+   * Find `Environment=NWS_USER_AGENT=FreePBX-NWS-Alert/1.0 (contact: you@domain.com)`
+   * Change to your real email (e.g., `ops@yourcompany.com`).
 
-🧪 Testing
+2. **Enable and start the service:**
 
-Dial 7788 from any extension to subscribe to a SAME code.
+   ```bash
+   systemctl daemon-reload
+   systemctl enable --now nws-alert-poller
+   systemctl status nws-alert-poller
+   ```
 
-Check logs for the poller:
+---
 
-journalctl -xeu nws-alert-poller --no-pager
+## FreePBX / Phone Settings
 
+* **Intercom / Auto-Answer:**
+  In FreePBX, ensure the **Intercom prefix** (typically `*80`) is **enabled** (Admin → Feature Codes).
+  On phones, enable “Auto Answer by Call-Info/Alert-Info” (name varies by vendor).
 
-To force a test message, use the manual paging script (not in repo, but included in instructions):
+* **Wideband (HD) audio:**
+  Enable **G.722** on extensions/phones and in FreePBX so alerts and prompts play in higher quality.
 
-./nws_tts_page.sh -e 1001 -m "This is a test of the paging system."
+---
 
-🔧 Customization
+## How It Works (user flow)
 
-Email Address
-Update nws-alert-poller.service and replace you@domain.com with your actual contact email.
-NWS requires a valid User-Agent string when hitting their API.
+1. **Subscribe by phone:**
+   Dial **7788** from any extension:
 
-Extension Numbers
-Adjust the intercom prefix (*80) or the subscription menu extension (7788) in extensions_custom.conf if needed.
+   * Press **1** to add a 6-digit SAME code
+   * Press **2** to remove a code
+   * Press **3** to hear your current codes
 
-Codecs
-Enable G.722 (wideband) on your phones and in FreePBX for higher-quality audio.
+2. **When an alert is active:**
+   The poller:
 
-🛠 Troubleshooting
+   * Queries the NWS API with a valid User-Agent (includes your email)
+   * Matches each alert’s SAME codes to your subscribers
+   * Generates an HD TTS file (per SAME code + alert thread)
+   * **Auto-answers** target extensions using the FreePBX intercom prefix
 
-No audio or garbled prompts?
-Ensure libttspico-utils and sox are installed.
+3. **No duplicates:**
+   Each extension is called **once per alert thread** (initial + updates), even if multiple SAME codes match.
 
-No alerts arriving?
-Check /etc/asterisk/nws_subscriptions.json — subscriptions must exist.
+---
 
-Phones not auto-answering?
-Confirm *80 intercom prefix is enabled in FreePBX and phones are set to trust intercom auto-answer.
+## Data & Audio Locations (FYI)
 
-📧 Notes
+* Subscriptions (written by the menu/AGI):
+  `/etc/asterisk/nws_subscriptions.json`
 
-This project is a starting point — it’s up to you to maintain and secure your FreePBX server.
+* De-duplication state (written by poller):
+  `/var/lib/asterisk/nws_alert_state.json`
 
-Always replace placeholders like you@domain.com with real, valid details.
+* Audio cache (per SAME + alert group), wideband:
+  `/var/lib/asterisk/sounds/custom/nws_<SAME>_<GROUP>.wav16`
 
-Alerts are issued immediately by the NWS API, but actual delivery depends on poller frequency and phone configuration.
+---
 
-✨ That’s it! Once installed, your FreePBX will call subscribed extensions with live NWS weather alerts.
+## Testing & Troubleshooting
+
+* **Dialplan loaded?**
+
+  ```bash
+  asterisk -rx "dialplan show 7788@from-internal"
+  ```
+
+* **Reload after changes:**
+
+  ```bash
+  fwconsole reload
+  ```
+
+* **Poller logs:**
+
+  ```bash
+  journalctl -xeu nws-alert-poller --no-pager
+  ```
+
+* **Sounds directory permissions (if you see write errors):**
+
+  ```bash
+  mkdir -p /var/lib/asterisk/sounds/custom
+  chown -R asterisk:asterisk /var/lib/asterisk/sounds/custom
+  chmod -R 755 /var/lib/asterisk/sounds/custom
+  ```
+
+---
+
+## Notes & Reminders
+
+* Replace **`you@domain.com`** anywhere it appears with your **real, reachable email address**.
+  The NWS API rejects generic/missing User-Agents.
+
+* Ensure your phones/extensions negotiate **G.722** to actually hear HD audio; otherwise Asterisk will transcode to narrowband.
+
+* This project is a starting point—harden and monitor your PBX according to your environment’s best practices.
+
+---
+
+If you get stuck on any step, open an issue with your **FreePBX version**, a **snippet of `journalctl -xeu nws-alert-poller`**, and what you’ve tried so far.
