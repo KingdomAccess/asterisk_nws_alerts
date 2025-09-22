@@ -5,10 +5,13 @@ After=network-online.target
 
 [Service]
 Type=simple
+# IMPORTANT: change you@domain.com to a real email address (NWS policy)
 Environment=NWS_USER_AGENT=FreePBX-NWS-Alert/1.0 (contact: you@domain.com)
+# Optional: adjust pre-wait before playback (seconds)
+Environment=NWS_PREWAIT_SEC=2
 ExecStart=/usr/bin/python3 /usr/local/bin/nws_alert_poller.py
 Restart=always
-RestartSec=15
+RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
