@@ -138,8 +138,8 @@ def tts_wav16_base(text: str, same_code: str, group_id: str) -> str:
 
 def page_extension(ext: str, playback_base: str):
     """
-    Auto-answer via *80 and prepend 'silence/1' files so the delay occurs AFTER answer/bridge.
-    playback_base looks like 'custom/nws_<SAME>_<GROUP>'.
+    Auto-answer via *80, prepend silence/1 N times (post-answer delay),
+    then play the file; set CallerID to 'System Alert'.
     """
     if NWS_PREWAIT_SEC > 0:
         play_chain = "&".join(["silence/1"] * NWS_PREWAIT_SEC + [playback_base])
@@ -148,8 +148,10 @@ def page_extension(ext: str, playback_base: str):
 
     subprocess.run([
         "asterisk","-rx",
-        f"channel originate Local/*80{ext}@from-internal application Playback {play_chain}"
+        f"channel originate Local/*80{ext}@from-internal "
+        f"application Playback {play_chain} callerid \"System Alert\" <0000>"
     ], check=False)
+
 
 def cleanup_old_audio():
     now = time.time()
