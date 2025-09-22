@@ -19,7 +19,7 @@ NWS_PREWAIT_SEC = int(os.getenv("NWS_PREWAIT_SEC", "2"))  # whole seconds of sil
 # API
 # ------------------------------------------------------------
 # Note: message_type must be lowercase per NWS enum
-NWS_URL = "https://api.weather.gov/alerts/active?status=actual&message_type=alert,update&limit=500"
+NWS_URL = "https://api.weather.gov/alerts/active?status=actual&message_type=alert,update"
 
 # ------------------------------------------------------------
 # Audio cache naming / retention
