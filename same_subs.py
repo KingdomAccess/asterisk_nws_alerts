@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-import sys, os, json, re, hashlib, subprocess, tempfile
+import sys, os, json, re, hashlib, subprocess, tempfile, logging
 from pathlib import Path
+import pwd, grp
 
-DB = Path("/etc/asterisk/nws_subscriptions.json")
+# Use a writeable location
+DB = Path("/var/lib/asterisk/nws_subscriptions.json")
 SOUNDS_DIR = Path("/var/lib/asterisk/sounds/custom")
 VOICE = "en-US"
+LOG = Path("/var/log/asterisk/same_subs.log")
+
+# Logging (best-effort; won't crash if perms deny)
+try:
+    logging.basicConfig(filename=str(LOG), level=logging.INFO, format="%(asctime)s %(message)s")
+except Exception:
+    pass
 
 def load_db():
     try:
@@ -53,28 +62,37 @@ def agi_cmd(cmd):
     sys.stdin.readline()
 
 def speak_tts(text):
-    SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
-    base = "tts_" + hashlib.sha1(text.encode()).hexdigest()[:12]
-    raw = Path(tempfile.gettempdir()) / (base + ".wav")
-    final = SOUNDS_DIR / (base + ".wav")
-    final16 = SOUNDS_DIR / (base + ".wav16")
-    subprocess.run(["pico2wave", "-l", VOICE, "-w", str(raw), text], check=True)
-    subprocess.run([
-        "sox", str(raw), "-r", "16000", "-c", "1", "-b", "16", "-e", "signed-integer",
-        str(final), "norm", "-3"
-    ], check=True)
-    if final16.exists():
-        final16.unlink(missing_ok=True)
-    final.rename(final16)
     try:
-        os.chown(final16, os.getpwnam("asterisk").pw_uid, os.getgrnam("asterisk").gr_gid)  # type: ignore
-    except Exception:
-        pass
-    agi_cmd(f"STREAM FILE custom/{base} \"\"")
-    try:
-        raw.unlink(missing_ok=True)
-    except Exception:
-        pass
+        SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
+        base = "tts_" + hashlib.sha1(text.encode()).hexdigest()[:12]
+        raw = Path(tempfile.gettempdir()) / (base + ".wav")
+        final = SOUNDS_DIR / (base + ".wav")
+        final16 = SOUNDS_DIR / (base + ".wav16")
+
+        subprocess.run(["pico2wave", "-l", VOICE, "-w", str(raw), text], check=True)
+        subprocess.run([
+            "sox", str(raw), "-r", "16000", "-c", "1", "-b", "16", "-e", "signed-integer",
+            str(final), "norm", "-3"
+        ], check=True)
+
+        if final16.exists():
+            final16.unlink(missing_ok=True)
+        final.rename(final16)
+
+        try:
+            os.chown(final16, pwd.getpwnam("asterisk").pw_uid, grp.getgrnam("asterisk").gr_gid)
+        except Exception:
+            pass
+
+        agi_cmd(f'STREAM FILE custom/{base} ""')
+        try:
+            raw.unlink(missing_ok=True)
+        except Exception:
+            pass
+    except Exception as e:
+        logging.info(f"TTS error: {e}")
+        # fall back to a builtin prompt if TTS fails
+        agi_cmd('STREAM FILE sorry ""')
 
 def main():
     agi_read_env()
@@ -83,36 +101,42 @@ def main():
     ext = re.sub(r"\D", "", args.get("ext", ""))
     code = re.sub(r"\D", "", args.get("code", ""))
 
+    logging.info(f"AGI mode={mode} ext={ext} code={code}")
+
     if not ext:
         speak_tts("Sorry. No extension detected.")
         return
 
-    if mode == "add":
-        if len(code) != 6:
-            speak_tts("Invalid code.")
+    try:
+        if mode == "add":
+            if len(code) != 6:
+                speak_tts("Invalid code.")
+                return
+            upsert_code(ext, code)
+            speak_tts("Code saved. Thank you.")
             return
-        upsert_code(ext, code)
-        speak_tts("Code saved. Thank you.")
-        return
 
-    if mode == "remove":
-        if len(code) != 6:
-            speak_tts("Invalid code.")
+        if mode == "remove":
+            if len(code) != 6:
+                speak_tts("Invalid code.")
+                return
+            ok = remove_code(ext, code)
+            speak_tts("Code removed." if ok else "That code was not found.")
             return
-        ok = remove_code(ext, code)
-        speak_tts("Code removed." if ok else "That code was not found.")
-        return
 
-    if mode == "list":
-        codes = list_codes(ext)
-        if not codes:
-            speak_tts("You are not subscribed to any codes.")
-        else:
-            speak_tts("You are subscribed to the following codes: " + ", ".join(codes))
-        return
+        if mode == "list":
+            codes = list_codes(ext)
+            if not codes:
+                speak_tts("You are not subscribed to any codes.")
+            else:
+                speak_tts("You are subscribed to the following codes: " + ", ".join(codes))
+            return
 
-    speak_tts("Unknown request.")
-    return
+        speak_tts("Unknown request.")
+    except Exception as e:
+        logging.info(f"AGI error: {e}")
+        speak_tts("An error occurred.")
+        return
 
 if __name__ == "__main__":
     main()
