@@ -14,14 +14,12 @@ This system transforms your FreePBX into a **live weather alerting platform** po
    When the NWS issues an alert for any of your SAME codes:
 
    * The system **immediately fetches the alert**
-   * Generates **crystal-clear HD audio** using local text-to-speech
+   * Generates **clear audio** using local text-to-speech
    * Your phone **auto-answers via intercom** and plays the warning
-   * The call will display as **System Alert** instead of “Unknown Caller”
+   * The call will display as **System Alert**
 
 3. **No spam, no repeats**
    Each extension gets called **once per alert thread** (initial + updates), even if multiple SAME codes overlap.
-
-⚡ In short: you’ll never miss a weather warning again, and your PBX becomes the smartest, fastest alerting tool around.
 
 ---
 
